@@ -25,7 +25,7 @@ const (
 
 var (
 	client *http.Client
-	wg     *sync.WaitGroup
+	wg     sync.WaitGroup
 )
 
 func downloadDictionary(u string) {
@@ -117,7 +117,8 @@ doPageRequest:
 	ss := regexDict.FindAllSubmatch(data, -1)
 	for _, match := range ss {
 		dict := string(match[1])
-		go downloadDictionary(dict)
+		//go downloadDictionary(dict)
+		log.Println("downloading", dict)
 	}
 }
 
