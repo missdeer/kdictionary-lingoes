@@ -4,16 +4,18 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
 	rootURL                 = `http://www.lingoes.cn/zh/dictionary/index.html`
-	categoryURLPattern      = `http://www\.lingoes\.cn/zh/dictionary/dict_cata\.php?cata=\d+\.\w+`
-	dictionaryURLPattern    = `http://www\.lingoes\.cn/zh/dictionary/dict_down\.php?id=[0-9A-Z]{32,}`
-	dictionaryLinkPattern   = `http://www\.lingoes\.cn/download/dict/ld2/[^\.]+\.ld2`
+	categoryURLPattern      = `dict_cata\.php\?cata=\d+(\.\w+)?`
+	dictionaryURLPattern    = `dict_down\.php\?id=[0-9A-Z]{32,}`
+	dictionaryLinkPattern   = `http://www\.lingoes\.cn/download/dict/[^\.]+\.ld2`
 	host                    = `www.lingoes.cn`
 	userAgent               = ` Mozilla/5.0 (Windows NT 6.1; WOW64; rv:53.0) Gecko/20100101 Firefox/53.0`
 	accept                  = `text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8`
@@ -113,12 +115,24 @@ doPageRequest:
 		return
 	}
 
-	regexDict := regexp.MustCompile(dictionaryLinkPattern)
-	ss := regexDict.FindAllSubmatch(data, -1)
-	for _, match := range ss {
-		dict := string(match[1])
-		//go downloadDictionary(dict)
+	if resp.StatusCode != 200 {
+		log.Println("downloadDictionaryPage status", resp.Status)
+		retry++
+		if retry < 3 {
+			time.Sleep(3 * time.Second)
+			goto doPageRequest
+		}
+		return
+	}
+
+	idx := strings.Index(string(data), `href="http://www.lingoes.cn/download/dict/`)
+	if idx > 0 {
+		endIdx := strings.Index(string(data)[idx+6:], `"`)
+		dict := string(data)[idx+6 : idx+5+endIdx]
 		log.Println("downloading", dict)
+	} else {
+		log.Println("can't find dictionary on", u, string(data))
+		os.Exit(1)
 	}
 }
 
@@ -166,8 +180,9 @@ doPageRequest:
 	regexDict := regexp.MustCompile(dictionaryURLPattern)
 	ss := regexDict.FindAllSubmatch(data, -1)
 	for _, match := range ss {
-		dict := string(match[1])
-		go downloadDictionaryPage(dict)
+		dict := string(match[0])
+		log.Println("found dictionary", dict, "on category", u)
+		go downloadDictionaryPage(`http://www.lingoes.cn/zh/dictionary/` + dict)
 	}
 }
 
@@ -215,15 +230,17 @@ doPageRequest:
 	regexCategory := regexp.MustCompile(categoryURLPattern)
 	ss := regexCategory.FindAllSubmatch(data, -1)
 	for _, match := range ss {
-		cate := string(match[1])
-		go downloadCategory(cate)
+		cate := string(match[0])
+		log.Println("found category", cate, "on root")
+		go downloadCategory(`http://www.lingoes.cn/zh/dictionary/` + cate)
 	}
 
 	regexDict := regexp.MustCompile(dictionaryURLPattern)
 	ss = regexDict.FindAllSubmatch(data, -1)
 	for _, match := range ss {
-		dict := string(match[1])
-		go downloadDictionaryPage(dict)
+		dict := string(match[0])
+		log.Println("found dictionary", dict, "on root")
+		go downloadDictionaryPage(`http://www.lingoes.cn/zh/dictionary/` + dict)
 	}
 }
 
