@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -20,58 +22,137 @@ const (
 	userAgent               = ` Mozilla/5.0 (Windows NT 6.1; WOW64; rv:53.0) Gecko/20100101 Firefox/53.0`
 	accept                  = `text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8`
 	acceptLanguage          = `en-US,en;q=0.5`
-	cookie                  = `bwm_uid=YEX4mbDELdWZqf2tjoJ+0Q==; ul=en; PHPSESSID=jtkvf0mivt70ubiiho00op7of5`
+	cookie                  = `bwm_uid=R0aTmS7Eskuxqf2tXoKq0Q==`
 	connection              = `keep-alive`
 	upgradeInsecureRequests = `1`
+	retryCount              = math.MaxInt32
 )
+
+type Semaphore struct {
+	c chan int
+}
+
+func NewSemaphore(n int) *Semaphore {
+	s := &Semaphore{
+		c: make(chan int, n),
+	}
+	return s
+}
+
+func (s *Semaphore) Acquire() {
+	s.c <- 0
+}
+
+func (s *Semaphore) Release() {
+	<-s.c
+}
+
+type Dictionary map[string]string
 
 var (
-	client *http.Client
-	wg     sync.WaitGroup
+	client            *http.Client
+	wg                sync.WaitGroup
+	dictionaries      = make(map[string]Dictionary)
+	dictionariesMutex sync.Mutex
+	sema              = NewSemaphore(3)
 )
 
-func downloadDictionary(u string) {
-	wg.Add(1)
-	defer wg.Done()
-	retry := 0
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		log.Println("Could not parse downloadDictionary request:", err)
-		return
+func exists(f string) bool {
+	stat, err := os.Stat(f)
+	if err == nil {
+		if stat.Mode()&os.ModeType == 0 {
+			return true
+		}
+		return false
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return false
+}
+
+func downloadDictionary(u string, m Dictionary) {
+	sema.Acquire()
+	defer func() {
+		sema.Release()
+		wg.Done()
+	}()
+	if !exists(m["id"]) {
+		os.MkdirAll(m["id"], 0777)
+	}
+	slashIdx := strings.LastIndex(u, "/")
+	name := u[slashIdx:]
+	filePath := m["id"] + name
+	if !exists(filePath) {
+		retry := 0
+		req, err := http.NewRequest("GET", u, nil)
+		if err != nil {
+			log.Println("Could not parse downloadDictionary request:", err)
+			return
+		}
+
+		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("Accept", accept)
+		req.Header.Set("Accept-Language", acceptLanguage)
+		req.Header.Set("Referer", m["referer"])
+		req.Header.Set("Cookie", cookie)
+		req.Header.Set("Connection", connection)
+		req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
+	doPageRequest:
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("Could not send downloadDictionary request:", err)
+			retry++
+			if retry < retryCount {
+				time.Sleep(3 * time.Second)
+				goto doPageRequest
+			}
+			return
+		}
+
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			// log.Println("downloadDictionaryPage status", resp.Status)
+			retry++
+			if retry < retryCount {
+				time.Sleep(3 * time.Second)
+				goto doPageRequest
+			}
+			return
+		}
+
+		if resp.Header.Get("Content-Type") != `application/octet-stream` {
+			retry++
+			if retry < retryCount {
+				time.Sleep(3 * time.Second)
+				goto doPageRequest
+			}
+			return
+		}
+
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("cannot read downloadDictionary content", err)
+			retry++
+			if retry < retryCount {
+				time.Sleep(3 * time.Second)
+				goto doPageRequest
+			}
+			return
+		}
+		// save data to file
+		ioutil.WriteFile(filePath, data, 0644)
+		log.Println(u, "is saved to", m["id"]+name)
 	}
 
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", accept)
-	req.Header.Set("Accept-Language", acceptLanguage)
-	req.Header.Set("Referer", rootURL)
-	req.Header.Set("Cookie", cookie)
-	req.Header.Set("Connection", connection)
-	req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
-doPageRequest:
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("Could not send downloadDictionary request:", err)
-		retry++
-		if retry < 3 {
-			time.Sleep(3 * time.Second)
-			goto doPageRequest
+	readme := m["id"] + "/readme.txt"
+	if !exists(readme) {
+		var s []string
+		for k, v := range m {
+			s = append(s, fmt.Sprintf("%s: %s", k, v))
 		}
-		return
+		ioutil.WriteFile(readme, []byte(strings.Join(s, "\n")), 0644)
 	}
-
-	defer resp.Body.Close()
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("cannot read downloadDictionary content", err)
-		retry++
-		if retry < 3 {
-			time.Sleep(3 * time.Second)
-			goto doPageRequest
-		}
-		return
-	}
-	// save data to file
-	ioutil.WriteFile("file.ld2", data, 0644)
 }
 
 func downloadDictionaryPage(u string) {
@@ -96,7 +177,7 @@ doPageRequest:
 	if err != nil {
 		log.Println("Could not send downloadDictionaryPage request:", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
@@ -104,36 +185,77 @@ doPageRequest:
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		// log.Println("downloadDictionaryPage status", resp.Status)
+		retry++
+		if retry < retryCount {
+			time.Sleep(3 * time.Second)
+			goto doPageRequest
+		}
+		return
+	}
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("cannot read downloadDictionaryPage content", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
 		return
 	}
 
-	if resp.StatusCode != 200 {
-		log.Println("downloadDictionaryPage status", resp.Status)
-		retry++
-		if retry < 3 {
-			time.Sleep(3 * time.Second)
-			goto doPageRequest
-		}
+	content := string(data)
+	idx := strings.Index(content, `href="http://www.lingoes.cn/download/dict/ld2`)
+	if idx < 0 {
+		log.Println("can't find dictionary on", u)
 		return
 	}
+	endIdx := strings.Index(content[idx+6:], `"`)
+	if endIdx < 0 {
+		log.Println("can't find dictionary on", u)
+		return
+	}
+	dict := content[idx+6 : idx+6+endIdx]
+	m := make(Dictionary)
+	m["referer"] = u
 
-	idx := strings.Index(string(data), `href="http://www.lingoes.cn/download/dict/`)
+	idIdx := strings.Index(u, "id=")
+	id := u[idIdx+3:]
+	m["id"] = id
+
+	titlePattern := `<div title="ID: [0-9A-Z]{32,}" style="font\-size: 16px; color:#07519A;"><b>([^<]+)</b>`
+	regexTitle := regexp.MustCompile(titlePattern)
+	ss := regexTitle.FindAllSubmatch(data, -1)
+	for _, match := range ss {
+		m["title"] = string(match[1])
+		break
+	}
+
+	descriptionLeadings := `<div style="margin: 10px 0 10px 0; line-height: 130%">`
+	idx = strings.Index(content, descriptionLeadings)
 	if idx > 0 {
-		endIdx := strings.Index(string(data)[idx+6:], `"`)
-		dict := string(data)[idx+6 : idx+5+endIdx]
-		log.Println("downloading", dict)
-	} else {
-		log.Println("can't find dictionary on", u, string(data))
-		os.Exit(1)
+		endIdx = strings.Index(content[idx+len(descriptionLeadings):], "</div>")
+		if endIdx > 0 {
+			m["description"] = content[idx+len(descriptionLeadings) : idx+len(descriptionLeadings)+endIdx-1]
+		}
 	}
+
+	languageLeadings := `<td width="80" valign="top"><font color="#333"><b>语言:</b></font></td>`
+	idx = strings.Index(content, languageLeadings)
+	if idx > 0 {
+		p := `<td valign="top">([^<]+)</td>`
+		regexLang := regexp.MustCompile(p)
+		ss := regexLang.FindAllSubmatch(data, -1)
+		for _, match := range ss {
+			m["language"] = strings.Trim(string(match[1]), "\r\n ")
+			break
+		}
+	}
+
+	dictionariesMutex.Lock()
+	dictionaries[dict] = m
+	dictionariesMutex.Unlock()
 }
 
 func downloadCategory(u string) {
@@ -158,7 +280,7 @@ doPageRequest:
 	if err != nil {
 		log.Println("Could not send downloadCategory request:", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
@@ -166,11 +288,20 @@ doPageRequest:
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		// log.Println("downloadDictionaryPage status", resp.Status)
+		retry++
+		if retry < retryCount {
+			time.Sleep(3 * time.Second)
+			goto doPageRequest
+		}
+		return
+	}
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("cannot read downloadCategory content", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
@@ -208,7 +339,7 @@ doPageRequest:
 	if err != nil {
 		log.Println("Could not send downloadRoot request:", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
@@ -216,11 +347,20 @@ doPageRequest:
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		// log.Println("downloadDictionaryPage status", resp.Status)
+		retry++
+		if retry < retryCount {
+			time.Sleep(3 * time.Second)
+			goto doPageRequest
+		}
+		return
+	}
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Println("cannot read downloadRoot content", err)
 		retry++
-		if retry < 3 {
+		if retry < retryCount {
 			time.Sleep(3 * time.Second)
 			goto doPageRequest
 		}
@@ -245,10 +385,15 @@ doPageRequest:
 }
 
 func main() {
-	client = &http.Client{
-		Timeout: 60 * time.Second,
-	}
+	client = &http.Client{}
 
 	downloadRoot()
+	wg.Wait()
+
+	log.Println("total dictionary count:", len(dictionaries))
+	wg.Add(len(dictionaries))
+	for dict, m := range dictionaries {
+		go downloadDictionary(dict, m)
+	}
 	wg.Wait()
 }
