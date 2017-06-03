@@ -24,9 +24,11 @@
 #include <QTextStream>
 #include <QtEndian>
 #include <exception>
+#include "plaintextwriter.h"
+#include "sqlitewriter.h"
 
-Lingoes::Lingoes(const QString &openFile, bool _trim) :
-    trim(_trim)
+Lingoes::Lingoes(const QString &openFile, bool _trim, bool _saveInDb) :
+    trim(_trim), saveInDb(_saveInDb)
 {
     ld2file = openFile;
     QFile file(ld2file);
@@ -142,9 +144,21 @@ inline void Lingoes::decompress(QByteArray *inflatedData, const int offset, cons
 
 void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, const int offsetXml, const QString &outputfile)
 {
-    QFile fileout(outputfile);
-    fileout.open(QIODevice::WriteOnly|QIODevice::Text);
-    QTextStream out(&fileout);
+    PlainTextWriter* pw = nullptr;
+    SqliteWriter* sw = nullptr;
+
+    std::function<void(const QString&, const QString&)> append;
+    if (saveInDb)
+    {
+        sw = new SqliteWriter(outputfile);
+        append = std::bind(&SqliteWriter::append, sw, std::placeholders::_1, std::placeholders::_2);
+    }
+    else
+    {
+        pw = new PlainTextWriter(outputfile);
+        append = std::bind(&PlainTextWriter::append, pw, std::placeholders::_1, std::placeholders::_2);
+    }
+
     int counter = 0;
     const int dataLen = 10;
     const int defTotal = (offsetDefs / dataLen) - 1;
@@ -152,20 +166,19 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
     int idxData[6];
     QString defData[2];
     detectEncodings(inflatedBytes, offsetDefs, offsetXml, defTotal, dataLen, idxData);
-    
+
     qDebug() << "Extracting...";
     inflated_pos = 8;
     for (int i = 0; i < defTotal; i++) {
         readDefinitionData(inflatedBytes, offsetDefs, offsetXml, dataLen, idxData, defData, i);
-        line.append(defData[0]);
-        line.append(" = ");
-        line.append(defData[1]);
-        out << line << endl;
+        append(defData[0], defData[1]);
         line.clear();
         counter++;
     }
-    out.flush();
-    fileout.close();
+    if (sw)
+        delete sw;
+    if (pw)
+        delete pw;
     qDebug() << "Extracted" << counter << "entries.";
 }
 

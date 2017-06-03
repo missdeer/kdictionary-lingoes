@@ -27,7 +27,7 @@
 int main(int argc, char** argv)
 {
     QCoreApplication app(argc, argv);
-    app.setApplicationName("KDictionary-Lingoes");
+    app.setApplicationName("LingoesDictionaryConverter");
     app.setApplicationVersion("1.0");
 
     QCommandLineParser parser;
@@ -38,10 +38,12 @@ int main(int argc, char** argv)
     QCommandLineOption ldxfile("i", "Input Lingoes dictionary file (default: input.ld2).", "input", "input.ld2");
     QCommandLineOption outfile("o", "Output extracted text file (default: output.txt).", "output", "output.txt");
     QCommandLineOption notrim("disable-trim", "Disable HTML tag trimming.");
+    QCommandLineOption saveInDb("save-as-db", "Save output as sqlite3 database. Plain text by default.");
 
     parser.addOption(ldxfile);
     parser.addOption(outfile);
     parser.addOption(notrim);
+    parser.addOption(saveInDb);
 
     parser.process(app);
 
@@ -54,7 +56,8 @@ int main(int argc, char** argv)
 
     QString ld2file = ld2FileInfo.canonicalFilePath();
     bool trim = !parser.isSet(notrim);
-    Lingoes ldx(ld2file, trim);
+    bool db = parser.isSet(saveInDb);
+    Lingoes ldx(ld2file, trim, db);
     ldx.extractToFile(parser.value(outfile));
 
     return 0;
