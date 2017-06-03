@@ -39,11 +39,13 @@ int main(int argc, char** argv)
     QCommandLineOption outfile("o", "Output extracted text file (default: output.txt).", "output", "output.txt");
     QCommandLineOption notrim("disable-trim", "Disable HTML tag trimming.");
     QCommandLineOption saveInDb("save-as-db", "Save output as sqlite3 database. Plain text by default.");
+    QCommandLineOption autoEncodings("auto-encoding", "Detect encodings automatically. No by default");
 
     parser.addOption(ldxfile);
     parser.addOption(outfile);
     parser.addOption(notrim);
     parser.addOption(saveInDb);
+    parser.addOption(autoEncodings);
 
     parser.process(app);
 
@@ -57,7 +59,8 @@ int main(int argc, char** argv)
     QString ld2file = ld2FileInfo.canonicalFilePath();
     bool trim = !parser.isSet(notrim);
     bool db = parser.isSet(saveInDb);
-    Lingoes ldx(ld2file, trim, db);
+    bool ae = parser.isSet(autoEncodings);
+    Lingoes ldx(ld2file, trim, db, ae);
     ldx.extractToFile(parser.value(outfile));
 
     return 0;

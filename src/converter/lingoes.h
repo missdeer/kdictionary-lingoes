@@ -29,7 +29,7 @@ class Lingoes : public QObject
 Q_OBJECT
 
 public:
-    Lingoes(const QString &, bool _trim, bool _saveInDb);
+    Lingoes(const QString &, bool _trim, bool _saveInDb, bool _ae);
     void extractToFile(const QString &);
     int getInt(const int);
     int getInt(const QByteArray &, const int);
@@ -41,6 +41,7 @@ public:
 private:
     const bool trim;
     const bool saveInDb;
+    const bool autoEncodings;
     int position;
     int inflated_pos;
     QString ld2file;

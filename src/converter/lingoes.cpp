@@ -27,8 +27,10 @@
 #include "plaintextwriter.h"
 #include "sqlitewriter.h"
 
-Lingoes::Lingoes(const QString &openFile, bool _trim, bool _saveInDb) :
-    trim(_trim), saveInDb(_saveInDb)
+Lingoes::Lingoes(const QString &openFile, bool _trim, bool _saveInDb, bool _ae) :
+    trim(_trim),
+    saveInDb(_saveInDb),
+    autoEncodings(_ae)
 {
     ld2file = openFile;
     QFile file(ld2file);
@@ -248,8 +250,13 @@ void Lingoes::detectEncodings(const QByteArray &inflatedBytes, const int offsetW
     //Before we can address encoding detection, let's give users a chance to specify codec.
     QTextStream stdinStream(stdin);
     QChar accepted;
-    qDebug() << "Continue with automatically detected encodings? (y/n)";
-    stdinStream >> accepted;
+    if (autoEncodings)
+        accepted = 'y';
+    else
+    {
+        qDebug() << "Continue with automatically detected encodings? (y/n)";
+        stdinStream >> accepted;
+    }
     if (accepted == 'n' || accepted == 'N') {
         QByteArray enc;
         qDebug() << "Please input the encoding for phrases. Enter dd to use default. Default:" << wordc->name();
