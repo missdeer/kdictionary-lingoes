@@ -27,30 +27,30 @@
 #include "plaintextwriter.h"
 #include "sqlitewriter.h"
 
-Lingoes::Lingoes(const QString &openFile, bool _trim, bool _saveInDb, bool _ae) :
-    trim(_trim),
-    saveInDb(_saveInDb),
-    autoEncodings(_ae)
+Lingoes::Lingoes(const QString &openFile, bool trim, bool saveInDb, bool autoEncodings) :
+    trim_(trim),
+    saveInDb_(saveInDb),
+    autoEncodings_(autoEncodings)
 {
-    ld2file = openFile;
-    QFile file(ld2file);
+    ld2file_ = openFile;
+    QFile file(ld2file_);
     file.open(QIODevice::ReadOnly);
-    ld2ByteArray = file.readAll();
+    ld2Content_ = file.readAll();
     file.close();
-    position = 0;
-    inflated_pos = 0;
+    position_ = 0;
+    inflatedPos_ = 0;
 }
 
 const QVector<QByteArray> Lingoes::availableEncodings = QVector<QByteArray>() << "UTF-8" << "UTF-16LE" << "UTF-16BE" << "EUC-JP";
 
 void Lingoes::extractToFile(const QString &outputfile)
 {
-    qDebug() << "File:" << ld2file;
-    qDebug() << "Type:" << ld2ByteArray.mid(1, 3);
+    qDebug() << "File:" << ld2file_;
+    qDebug() << "Type:" << ld2Content_.mid(1, 3);
     qDebug() << "Version:" << QByteArray::number(getShort(0x18)) + "." + QByteArray::number(getShort(0x1A));
     qDebug() << "ID:" << "0x" + toHexString(getLong(0x1C));
     int offsetData = getInt(0x5C) + 0x60;
-    if(ld2ByteArray.size() > offsetData) {
+    if(ld2Content_.size() > offsetData) {
         qDebug() << "Summary Addr:" << toHexString(offsetData);
         int dtype = getInt(offsetData);
         qDebug() << "Summary Type:" << toHexString(dtype);
@@ -58,7 +58,7 @@ void Lingoes::extractToFile(const QString &outputfile)
         if(dtype == 3) {
             readDictionary(offsetData, outputfile);
         }
-        else if(ld2ByteArray.size() > offsetWithInfo - 0x1C) {
+        else if(ld2Content_.size() > offsetWithInfo - 0x1C) {
             readDictionary(offsetWithInfo, outputfile);
         }
         else {
@@ -82,15 +82,15 @@ void Lingoes::readDictionary(const int offsetWithIndex, const QString &outputfil
     const int inflatedXmlLength = getInt(offsetWithIndex + 20);
     const int definitions = (offsetCompressedDataHeader - offsetIndex) / 4;
     QVector<int> deflateStreams;
-    position = offsetCompressedDataHeader + 8;//position here represents ByteBuffer's position() in Java
-    int offset = getInt(position);//In java, ByteBuffer's getInt() will increase the position by four(an Integer size).
-    position += sizeof(int);//Hence, we need to add it to position manually.
-    while (offset + position < limit) {
-        offset = getInt(position);
+    position_ = offsetCompressedDataHeader + 8;//position here represents ByteBuffer's position() in Java
+    int offset = getInt(position_);//In java, ByteBuffer's getInt() will increase the position by four(an Integer size).
+    position_ += sizeof(int);//Hence, we need to add it to position manually.
+    while (offset + position_ < limit) {
+        offset = getInt(position_);
         deflateStreams << offset;
-        position += sizeof(int);
+        position_ += sizeof(int);
     }
-    int offsetCompressedData = position;
+    int offsetCompressedData = position_;
     qDebug() << "Index Numbers:" << definitions;
     qDebug() << QString("Index Address/Size: 0x%1 / %2B").arg(toHexString(offsetIndex), QString::number(offsetCompressedDataHeader - offsetIndex));
     qDebug() << QString("Compressed Data Address/Size: 0x%1 / %2B").arg(toHexString(offsetCompressedData), QString::number(limit - offsetCompressedData));
@@ -101,7 +101,7 @@ void Lingoes::readDictionary(const int offsetWithIndex, const QString &outputfil
     QByteArray inflatedData;
     inflateData(deflateStreams, &inflatedData);
     if(!inflatedData.isEmpty()) {
-        position = offsetIndex + sizeof(int) * definitions;
+        position_ = offsetIndex + sizeof(int) * definitions;
         extract(inflatedData, inflatedWordsIndexLength, inflatedWordsIndexLength + inflatedWordsLength, outputfile);
     } else {
         qWarning() << "ERROR: Inflated Data is Empty.";
@@ -111,7 +111,7 @@ void Lingoes::readDictionary(const int offsetWithIndex, const QString &outputfil
 void Lingoes::inflateData(const QVector<int> &deflateStreams, QByteArray *inflatedData)
 {
     qDebug() << QString("Decompressing %1 data streams.").arg(deflateStreams.size());
-    int startOffset = position;
+    int startOffset = position_;
     int offset = -1;
     int lastOffset = startOffset;
     try {
@@ -131,7 +131,7 @@ inline void Lingoes::decompress(QByteArray *inflatedData, const int offset, cons
 {
     //uncompress deflate datastream
     try {
-        QByteArray data = ld2ByteArray.mid(offset, length);
+        QByteArray data = ld2Content_.mid(offset, length);
         QByteArray header(4, '\0');
         //FIXME: we should prepend expected extracted data length instead of compressed data length
         qToBigEndian(length, reinterpret_cast<uchar*>(header.data()));//see http://doc.qt.io/qt-5/qbytearray.html#qUncompress
@@ -152,7 +152,7 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
     std::function<void(const QString&, const QString&)> append;
     std::function<void()> start;
     std::function<void()> end;
-    if (saveInDb)
+    if (saveInDb_)
     {
         sw = new SqliteWriter(outputfile);
         append = std::bind(&SqliteWriter::append, sw, std::placeholders::_1, std::placeholders::_2);
@@ -177,7 +177,7 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
 
     qDebug() << "Extracting...";
     start();
-    inflated_pos = 8;
+    inflatedPos_ = 8;
     for (int i = 0; i < defTotal; i++) {
         readDefinitionData(inflatedBytes, offsetDefs, offsetXml, dataLen, idxData, defData, i);
         append(defData[0], defData[1]);
@@ -219,9 +219,9 @@ void Lingoes::detectEncodings(const QByteArray &inflatedBytes, const int offsetW
         }
         QByteArray wordBytes = inflatedBytes.mid(offsetWords + lastWordPos, currentWordOffset - lastWordPos);
 
-        wordc = QTextCodec::codecForName(availableEncodings.at(wordc_id));
-        QString word_res = wordc->toUnicode(wordBytes);
-        qDebug() << wordc->name() << "decodes phrase as" << word_res;
+        wordEncoding_ = QTextCodec::codecForName(availableEncodings.at(wordc_id));
+        QString word_res = wordEncoding_->toUnicode(wordBytes);
+        qDebug() << wordEncoding_->name() << "decodes phrase as" << word_res;
         if (!word_res.isSimpleText()) {
             if (wordc_id < availableEncodings.size() - 1) {
                 ++wordc_id;
@@ -231,9 +231,9 @@ void Lingoes::detectEncodings(const QByteArray &inflatedBytes, const int offsetW
             }
         }
 
-        xmlc = QTextCodec::codecForName(availableEncodings.at(xmlc_id));
-        QString xml_res = strip(xmlc->toUnicode(xmlBytes));
-        qDebug() << xmlc->name() << "decodes XML as" << xml_res;
+        xmlEncoding_ = QTextCodec::codecForName(availableEncodings.at(xmlc_id));
+        QString xml_res = strip(xmlEncoding_->toUnicode(xmlBytes));
+        qDebug() << xmlEncoding_->name() << "decodes XML as" << xml_res;
         if (!xml_res.isSimpleText()) {
             if (xmlc_id < availableEncodings.size() - 1) {
                 ++xmlc_id;
@@ -244,13 +244,13 @@ void Lingoes::detectEncodings(const QByteArray &inflatedBytes, const int offsetW
         }
     }
 
-    qDebug() << "Phrases Encoding:" << wordc->name();
-    qDebug() << "XML Encoding:" << xmlc->name();
+    qDebug() << "Phrases Encoding:" << wordEncoding_->name();
+    qDebug() << "XML Encoding:" << xmlEncoding_->name();
 
     //Before we can address encoding detection, let's give users a chance to specify codec.
     QTextStream stdinStream(stdin);
     QChar accepted;
-    if (autoEncodings)
+    if (autoEncodings_)
         accepted = 'y';
     else
     {
@@ -259,19 +259,19 @@ void Lingoes::detectEncodings(const QByteArray &inflatedBytes, const int offsetW
     }
     if (accepted == 'n' || accepted == 'N') {
         QByteArray enc;
-        qDebug() << "Please input the encoding for phrases. Enter dd to use default. Default:" << wordc->name();
+        qDebug() << "Please input the encoding for phrases. Enter dd to use default. Default:" << wordEncoding_->name();
         stdinStream >> enc;
         if (enc != "dd") {
-            wordc = QTextCodec::codecForName(enc);
+            wordEncoding_ = QTextCodec::codecForName(enc);
         }
         enc.clear();
-        qDebug() << "Please input the encoding for XML. Enter dd to use default. Default:" << xmlc->name();
+        qDebug() << "Please input the encoding for XML. Enter dd to use default. Default:" << xmlEncoding_->name();
         stdinStream >> enc;
         if (enc != "dd") {
-            xmlc = QTextCodec::codecForName(enc);
+            xmlEncoding_ = QTextCodec::codecForName(enc);
         }
-        qDebug() << "Phrases Encoding:" << wordc->name();
-        qDebug() << "XML Encoding:" << xmlc->name();
+        qDebug() << "Phrases Encoding:" << wordEncoding_->name();
+        qDebug() << "XML Encoding:" << xmlEncoding_->name();
     }
 }
 
@@ -284,27 +284,27 @@ void Lingoes::readDefinitionData(const QByteArray &inflatedBytes, const int offs
     int refs = idxData[3];
     const int currentWordOffset = idxData[4];
     int currenXmlOffset = idxData[5];
-    QString xml = strip(xmlc->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos)));
+    QString xml = strip(xmlEncoding_->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos)));
     while (refs-- > 0) {
         int ref = getInt(inflatedBytes, offsetWords + lastWordPos);
         getIdxData(inflatedBytes, dataLen * ref, idxData);
         lastXmlPos = idxData[1];
         currenXmlOffset = idxData[5];
         if (xml.isEmpty()) {
-            xml = strip(xmlc->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos)));
+            xml = strip(xmlEncoding_->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos)));
         } else {
-            xml = strip(xmlc->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos))) + ", " + xml;
+            xml = strip(xmlEncoding_->toUnicode(inflatedBytes.mid(offsetXml + lastXmlPos, currenXmlOffset - lastXmlPos))) + ", " + xml;
         }
         lastWordPos += 4;
     }
     defData[1] = xml;
-    QString word = wordc->toUnicode(inflatedBytes.mid(offsetWords + lastWordPos, currentWordOffset - lastWordPos));
+    QString word = wordEncoding_->toUnicode(inflatedBytes.mid(offsetWords + lastWordPos, currentWordOffset - lastWordPos));
     defData[0] = word;
 }
 
 QString Lingoes::strip(const QString &xml)
 {
-    if (!trim) {
+    if (!trim_) {
         return xml;
     }
     /*
@@ -341,25 +341,25 @@ QString Lingoes::strip(const QString &xml)
 
 void Lingoes::getIdxData(const QByteArray &inflatedBytes, const int pos, int wordIdxData[])
 {
-    inflated_pos = pos;
-    wordIdxData[0] = getInt(inflatedBytes ,inflated_pos);
-    inflated_pos += sizeof(int);
-    wordIdxData[1] = getInt(inflatedBytes ,inflated_pos);
-    inflated_pos += sizeof(int);
-    wordIdxData[2] = inflatedBytes[inflated_pos] & 0xff;
-    inflated_pos ++;
-    wordIdxData[3] = inflatedBytes[inflated_pos] & 0xff;
-    inflated_pos ++;
-    wordIdxData[4] = getInt(inflatedBytes ,inflated_pos);
-    inflated_pos += sizeof(int);
-    wordIdxData[5] = getInt(inflatedBytes ,inflated_pos);
-    inflated_pos += sizeof(int);
+    inflatedPos_ = pos;
+    wordIdxData[0] = getInt(inflatedBytes ,inflatedPos_);
+    inflatedPos_ += sizeof(int);
+    wordIdxData[1] = getInt(inflatedBytes ,inflatedPos_);
+    inflatedPos_ += sizeof(int);
+    wordIdxData[2] = inflatedBytes[inflatedPos_] & 0xff;
+    inflatedPos_ ++;
+    wordIdxData[3] = inflatedBytes[inflatedPos_] & 0xff;
+    inflatedPos_ ++;
+    wordIdxData[4] = getInt(inflatedBytes ,inflatedPos_);
+    inflatedPos_ += sizeof(int);
+    wordIdxData[5] = getInt(inflatedBytes ,inflatedPos_);
+    inflatedPos_ += sizeof(int);
 }
 
 //Inspired by https://github.com/Dasister/Game-Server-Query/blob/master/sourcequery.cpp
 inline int Lingoes::getInt(const int index)
 {
-    return *(reinterpret_cast<int *>(ld2ByteArray.mid(index, sizeof(int)).data()));
+    return *(reinterpret_cast<int *>(ld2Content_.mid(index, sizeof(int)).data()));
 }
 
 inline int Lingoes::getInt(const QByteArray &ba, const int index)
@@ -369,12 +369,12 @@ inline int Lingoes::getInt(const QByteArray &ba, const int index)
 
 inline qint16 Lingoes::getShort(const int index)
 {
-    return *(reinterpret_cast<qint16 *>(ld2ByteArray.mid(index, sizeof(qint16)).data()));
+    return *(reinterpret_cast<qint16 *>(ld2Content_.mid(index, sizeof(qint16)).data()));
 }
 
 inline qint32 Lingoes::getLong(const int index)
 {
-    return *(reinterpret_cast<qint32*>(ld2ByteArray.mid(index, sizeof(qint32)).data()));
+    return *(reinterpret_cast<qint32*>(ld2Content_.mid(index, sizeof(qint32)).data()));
 }
 
 inline QByteArray Lingoes::toHexString(const qint32 num)

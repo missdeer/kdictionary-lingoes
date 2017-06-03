@@ -29,7 +29,7 @@ class Lingoes : public QObject
 Q_OBJECT
 
 public:
-    Lingoes(const QString &, bool _trim, bool _saveInDb, bool _ae);
+    Lingoes(const QString &openFile, bool trim, bool saveInDb, bool autoEncodings);
     void extractToFile(const QString &);
     int getInt(const int);
     int getInt(const QByteArray &, const int);
@@ -39,15 +39,15 @@ public:
     QByteArray toHexString(const qint16);
 
 private:
-    const bool trim;
-    const bool saveInDb;
-    const bool autoEncodings;
-    int position;
-    int inflated_pos;
-    QString ld2file;
-    QByteArray ld2ByteArray;
-    QTextCodec* xmlc;//XML Encoding
-    QTextCodec* wordc;//Words Encoding
+    const bool trim_;
+    const bool saveInDb_;
+    const bool autoEncodings_;
+    int position_;
+    int inflatedPos_;
+    QString ld2file_;
+    QByteArray ld2Content_;
+    QTextCodec* xmlEncoding_;//XML Encoding
+    QTextCodec* wordEncoding_;//Words Encoding
     void readDictionary(const int offsetWithIndex, const QString &);
     void inflateData(const QVector<int> &, QByteArray *);
     void decompress(QByteArray *, const int, const quint32);
