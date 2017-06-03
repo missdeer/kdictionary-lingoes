@@ -37,9 +37,9 @@ int main(int argc, char** argv)
 
     QCommandLineOption ldxfile("i", "Input Lingoes dictionary file (default: input.ld2).", "input", "input.ld2");
     QCommandLineOption outfile("o", "Output extracted text file (default: output.txt).", "output", "output.txt");
-    QCommandLineOption notrim("disable-trim", "Disable HTML tag trimming.");
-    QCommandLineOption saveInDb("save-as-db", "Save output as sqlite3 database. Plain text by default.");
-    QCommandLineOption autoEncodings("auto-encoding", "Detect encodings automatically. No by default");
+    QCommandLineOption notrim("disable-trim", "Disable HTML tag trimming (default: no).");
+    QCommandLineOption saveInDb("save-as-db", "Save output as sqlite3 database (default: no).");
+    QCommandLineOption autoEncodings("auto-encoding", "Detect encodings automatically (default: no).");
 
     parser.addOption(ldxfile);
     parser.addOption(outfile);
