@@ -27,3 +27,13 @@ void PlainTextWriter::append(const QString &word, const QString &content)
 {
     *out_ << word << " = " << content << endl;
 }
+
+void PlainTextWriter::start()
+{
+
+}
+
+void PlainTextWriter::end()
+{
+
+}

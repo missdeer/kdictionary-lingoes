@@ -15,6 +15,8 @@ public:
     explicit PlainTextWriter(const QString& outputFilePath);
     ~PlainTextWriter();
     void append(const QString& word, const QString& content);
+    void start();
+    void end();
 private:
     QFile* file_;
     QTextStream* out_;

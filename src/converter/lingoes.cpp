@@ -148,15 +148,21 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
     SqliteWriter* sw = nullptr;
 
     std::function<void(const QString&, const QString&)> append;
+    std::function<void()> start;
+    std::function<void()> end;
     if (saveInDb)
     {
         sw = new SqliteWriter(outputfile);
         append = std::bind(&SqliteWriter::append, sw, std::placeholders::_1, std::placeholders::_2);
+        start = std::bind(&SqliteWriter::start, sw);
+        end = std::bind(&SqliteWriter::end, sw);
     }
     else
     {
         pw = new PlainTextWriter(outputfile);
         append = std::bind(&PlainTextWriter::append, pw, std::placeholders::_1, std::placeholders::_2);
+        start = std::bind(&PlainTextWriter::start, pw);
+        end = std::bind(&PlainTextWriter::end, pw);
     }
 
     int counter = 0;
@@ -168,6 +174,7 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
     detectEncodings(inflatedBytes, offsetDefs, offsetXml, defTotal, dataLen, idxData);
 
     qDebug() << "Extracting...";
+    start();
     inflated_pos = 8;
     for (int i = 0; i < defTotal; i++) {
         readDefinitionData(inflatedBytes, offsetDefs, offsetXml, dataLen, idxData, defData, i);
@@ -175,6 +182,7 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
         line.clear();
         counter++;
     }
+    end();
     if (sw)
         delete sw;
     if (pw)
