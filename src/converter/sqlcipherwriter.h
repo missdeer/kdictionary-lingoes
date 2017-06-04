@@ -8,6 +8,8 @@
 
 #include <QString>
 
+struct sqlite3;
+
 class SqlcipherWriter
 {
 public:
@@ -16,6 +18,9 @@ public:
     void append(const QString& word, const QString& content);
     void start();
     void end();
+private:
+    sqlite3 * db_;
+    void execDML(QString statement);
 };
 
 #endif // SQLCIPHERWRITER_H
