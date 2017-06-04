@@ -17,7 +17,14 @@ macx : {
             /System/Library/Frameworks/CoreFoundation.framework/Versions/Current/CoreFoundation
 } else : {
     DEFINES += SQLCIPHER_CRYPTO_OPENSSL
+    win32-msvc {
+        DEFINES += _CRT_SECURE_NO_WARNINGS
+    } else {
+        LIBS += -lssl -lcrypto
+    }
+    LIBS += -lgdi32
 }
+
 
 SOURCES += main.cpp \
     lingoes.cpp \

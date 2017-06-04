@@ -24,6 +24,7 @@
 #include <QTextStream>
 #include <QtEndian>
 #include <exception>
+#include <functional>
 #include "plaintextwriter.h"
 #include "sqlitewriter.h"
 #include "sqlcipherwriter.h"
