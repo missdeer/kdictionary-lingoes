@@ -26,19 +26,23 @@
 #include <exception>
 #include "plaintextwriter.h"
 #include "sqlitewriter.h"
+#include "sqlcipherwriter.h"
 
-Lingoes::Lingoes(const QString &openFile, bool trim, bool saveInDb, bool autoEncodings) :
+Lingoes::Lingoes(const QString &openFile, bool trim, bool autoEncodings, bool compressed, const QString& format, const QString& cipher, const QString& key) :
     trim_(trim),
-    saveInDb_(saveInDb),
-    autoEncodings_(autoEncodings)
+    autoEncodings_(autoEncodings),
+    compressed_(compressed),
+    position_(0),
+    inflatedPos_(0),
+    ld2file_(openFile),
+    format_(format),
+    cipher_(cipher),
+    key_(key)
 {
-    ld2file_ = openFile;
     QFile file(ld2file_);
     file.open(QIODevice::ReadOnly);
     ld2Content_ = file.readAll();
     file.close();
-    position_ = 0;
-    inflatedPos_ = 0;
 }
 
 const QVector<QByteArray> Lingoes::availableEncodings = QVector<QByteArray>() << "UTF-8" << "UTF-16LE" << "UTF-16BE" << "EUC-JP";
@@ -148,18 +152,26 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
 {
     PlainTextWriter* pw = nullptr;
     SqliteWriter* sw = nullptr;
+    SqlcipherWriter* cw = nullptr;
 
     std::function<void(const QString&, const QString&)> append;
     std::function<void()> start;
     std::function<void()> end;
-    if (saveInDb_)
+    if (format_ == "sqlite")
     {
         sw = new SqliteWriter(outputfile);
         append = std::bind(&SqliteWriter::append, sw, std::placeholders::_1, std::placeholders::_2);
         start = std::bind(&SqliteWriter::start, sw);
         end = std::bind(&SqliteWriter::end, sw);
     }
-    else
+    if (format_ == "sqlcipher")
+    {
+        cw = new SqlcipherWriter(outputfile, cipher_, key_);
+        append = std::bind(&SqlcipherWriter::append, cw, std::placeholders::_1, std::placeholders::_2);
+        start = std::bind(&SqlcipherWriter::start, cw);
+        end = std::bind(&SqlcipherWriter::end, cw);
+    }
+    if (format_ == "plaintext")
     {
         pw = new PlainTextWriter(outputfile);
         append = std::bind(&PlainTextWriter::append, pw, std::placeholders::_1, std::placeholders::_2);
@@ -189,6 +201,8 @@ void Lingoes::extract(const QByteArray &inflatedBytes, const int offsetDefs, con
         delete sw;
     if (pw)
         delete pw;
+    if (cw)
+        delete cw;
     qDebug() << "Extracted" << counter << "entries.";
 }
 

@@ -9,10 +9,22 @@ CONFIG -= app_bundle
 
 TEMPLATE = app
 
+DEFINES += SQLITE_HAS_CODEC
+
+macx : {
+    DEFINES += SQLCIPHER_CRYPTO_CC
+    LIBS += /System/Library/Frameworks/Security.framework/Versions/Current/Security \
+            /System/Library/Frameworks/CoreFoundation.framework/Versions/Current/CoreFoundation
+} else : {
+    DEFINES += SQLCIPHER_CRYPTO_OPENSSL
+}
+
 SOURCES += main.cpp \
     lingoes.cpp \
     plaintextwriter.cpp \
-    sqlitewriter.cpp
+    sqlitewriter.cpp \
+    sqlite3.c \
+    sqlcipherwriter.cpp
 
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which as been marked deprecated (the exact warnings
@@ -28,4 +40,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 HEADERS += \
     lingoes.h \
     plaintextwriter.h \
-    sqlitewriter.h
+    sqlitewriter.h \
+    sqlite3.h \
+    sqlite3ext.h \
+    sqlcipherwriter.h

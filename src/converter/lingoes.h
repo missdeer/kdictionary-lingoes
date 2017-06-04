@@ -29,7 +29,7 @@ class Lingoes : public QObject
 Q_OBJECT
 
 public:
-    Lingoes(const QString &openFile, bool trim, bool saveInDb, bool autoEncodings);
+    Lingoes(const QString &openFile, bool trim, bool autoEncodings, bool compressed, const QString& format, const QString& cipher, const QString& key);
     void extractToFile(const QString &);
     int getInt(const int);
     int getInt(const QByteArray &, const int);
@@ -40,11 +40,14 @@ public:
 
 private:
     const bool trim_;
-    const bool saveInDb_;
     const bool autoEncodings_;
+    const bool compressed_;
     int position_;
     int inflatedPos_;
     QString ld2file_;
+    QString format_;
+    QString cipher_;
+    QString key_;
     QByteArray ld2Content_;
     QTextCodec* xmlEncoding_;//XML Encoding
     QTextCodec* wordEncoding_;//Words Encoding

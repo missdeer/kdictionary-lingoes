@@ -38,14 +38,20 @@ int main(int argc, char** argv)
     QCommandLineOption ldxfile("i", "Input Lingoes dictionary file (default: input.ld2).", "input", "input.ld2");
     QCommandLineOption outfile("o", "Output extracted text file (default: output.txt).", "output", "output.txt");
     QCommandLineOption notrim("disable-trim", "Disable HTML tag trimming (default: no).");
-    QCommandLineOption saveInDb("save-as-db", "Save output as sqlite3 database (default: no).");
+    QCommandLineOption format("f", "Output format, can be plaintext, sqlite or sqlcipher (default: sqlcipher).", "format", "sqlcipher");
     QCommandLineOption autoEncodings("auto-encoding", "Detect encodings automatically (default: no).");
+    QCommandLineOption compressed("compressed", "Compress output (default: no).");
+    QCommandLineOption cipher("c", "Cipher name, only used when output as sqlcipher (default: aes-256-cbc).", "cipher name", "aes-256-cbc");
+    QCommandLineOption key("k", "Cipher key, only used when output as sqlcipher.", "key");
 
     parser.addOption(ldxfile);
     parser.addOption(outfile);
     parser.addOption(notrim);
-    parser.addOption(saveInDb);
     parser.addOption(autoEncodings);
+    parser.addOption(format);
+    parser.addOption(compressed);
+    parser.addOption(cipher);
+    parser.addOption(key);
 
     parser.process(app);
 
@@ -53,14 +59,23 @@ int main(int argc, char** argv)
     QFileInfo ld2FileInfo(inputFile);
     if (!ld2FileInfo.exists()) {
         qCritical()<<"Error: Input file" << inputFile << "doesn't exist.";
-        exit(1);
+        return 1;
+    }
+
+    if (parser.value(format) == "sqlcipher" && (parser.value(cipher).isEmpty() || parser.value(key).isEmpty()))
+    {
+        qCritical() << "Need cipher name and key for sqlcipher format.";
+        return 1;
     }
 
     QString ld2file = ld2FileInfo.canonicalFilePath();
-    bool trim = !parser.isSet(notrim);
-    bool db = parser.isSet(saveInDb);
-    bool ae = parser.isSet(autoEncodings);
-    Lingoes ldx(ld2file, trim, db, ae);
+    Lingoes ldx(ld2file,
+                !parser.isSet(notrim),
+                parser.isSet(autoEncodings),
+                parser.isSet(compressed),
+                parser.value(format),
+                parser.value(cipher),
+                parser.value(key));
     ldx.extractToFile(parser.value(outfile));
 
     return 0;
