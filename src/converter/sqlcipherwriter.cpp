@@ -10,7 +10,7 @@
 
 SqlcipherWriter::SqlcipherWriter(const QString &outputFilePath, const QString& cipherName, const QString& key)
 {
-    if(sqlite3_open_v2(outputFilePath.toUtf8(), &db_, SQLITE_OPEN_READWRITE, nullptr) != SQLITE_OK)
+    if(sqlite3_open_v2(outputFilePath.toUtf8(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK)
     {
         qCritical() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return ;
@@ -35,25 +35,30 @@ SqlcipherWriter::~SqlcipherWriter()
 void SqlcipherWriter::append(const QString &word, const QString &content)
 {
     sqlite3_stmt* stmt;
-    int success = 1;
     if(sqlite3_prepare_v2(db_, "INSERT INTO dict (word, content) VALUES (:word, :content);", -1, &stmt, 0) != SQLITE_OK)
     {
-        success = 0;
+        qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+        return;
     }
-    if(sqlite3_bind_text(stmt, 1, word.toUtf8(), word.length(), SQLITE_STATIC))
-        success = -1;
+    if(sqlite3_bind_text(stmt, 1, word.toUtf8(), word.length(), SQLITE_STATIC)){
+        qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+        return;
+    }
 
-    if(sqlite3_bind_text(stmt, 2, content.toUtf8(), content.length(), SQLITE_STATIC))
-        success = -1;
+    if(sqlite3_bind_text(stmt, 2, content.toUtf8(), content.length(), SQLITE_STATIC)){
+        qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+        return;
+    }
 
-    if(success == 1 && sqlite3_step(stmt) != SQLITE_DONE)
-        success = -1;
-    if(success != 0 && sqlite3_finalize(stmt) != SQLITE_OK)
-        success = -1;
-
-    if(success != 1)
+    if(sqlite3_step(stmt) != SQLITE_DONE)
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+        return;
+    }
+    if(sqlite3_finalize(stmt) != SQLITE_OK)
+    {
+        qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+        return;
     }
 }
 
@@ -73,6 +78,6 @@ void SqlcipherWriter::execDML(QString statement)
     if (sqlite3_exec(db_, statement.toUtf8(), NULL, NULL, &errmsg) != SQLITE_OK)
     {
         qCritical() << QString::fromUtf8(errmsg);
-        sqlite3_free(errmsg);
+        //sqlite3_free(errmsg);
     }
 }
