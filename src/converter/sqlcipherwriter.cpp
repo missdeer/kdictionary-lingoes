@@ -35,7 +35,7 @@ SqlcipherWriter::~SqlcipherWriter()
 void SqlcipherWriter::append(const QString &word, const QString &content)
 {
     sqlite3_stmt* stmt;
-    if(sqlite3_prepare_v2(db_, "INSERT INTO dict (word, content) VALUES (:word, :content);", -1, &stmt, 0) != SQLITE_OK)
+    if(sqlite3_prepare_v2(db_, "INSERT INTO dict (word, content) VALUES (?, ?);", -1, &stmt, 0) != SQLITE_OK)
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
