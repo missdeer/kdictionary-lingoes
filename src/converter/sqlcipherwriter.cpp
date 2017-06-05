@@ -40,13 +40,16 @@ void SqlcipherWriter::append(const QString &word, const QString &content)
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
     }
-    if(sqlite3_bind_text(stmt, 1, word.toUtf8(), word.toUtf8().length(), SQLITE_STATIC))
+
+    QByteArray w = word.toUtf8();
+    if(sqlite3_bind_text(stmt, 1, w.constData(), w.length(), SQLITE_STATIC))
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
     }
 
-    if(sqlite3_bind_text(stmt, 2, content.toUtf8(), content.toUtf8().length(), SQLITE_STATIC))
+    QByteArray c = content.toUtf8();
+    if(sqlite3_bind_text(stmt, 2, c.constData(), c.length(), SQLITE_STATIC))
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
