@@ -40,13 +40,13 @@ void SqlcipherWriter::append(const QString &word, const QString &content)
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
     }
-    if(sqlite3_bind_text(stmt, 1, word.toUtf8(), word.length(), SQLITE_STATIC))
+    if(sqlite3_bind_text(stmt, 1, word.toUtf8(), word.toUtf8().length(), SQLITE_STATIC))
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
     }
 
-    if(sqlite3_bind_text(stmt, 2, content.toUtf8(), content.length(), SQLITE_STATIC))
+    if(sqlite3_bind_text(stmt, 2, content.toUtf8(), content.toUtf8().length(), SQLITE_STATIC))
     {
         qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
         return;
@@ -76,10 +76,24 @@ void SqlcipherWriter::end()
 
 void SqlcipherWriter::execDML(QString statement)
 {
-    char *errmsg;
-    if (sqlite3_exec(db_, statement.toUtf8(), NULL, NULL, &errmsg) != SQLITE_OK)
-    {
-        qCritical() << QString::fromUtf8(errmsg);
-        sqlite3_free(errmsg);
-    }
+    int nRet;
+
+    do {
+        sqlite3_stmt* pVM = nullptr;
+        int res = sqlite3_prepare(db_, statement.toUtf8(), -1, &pVM, nullptr);
+        if (res != SQLITE_OK)
+        {
+            qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+            break;
+        }
+
+        nRet = sqlite3_step(pVM);
+
+        if (nRet == SQLITE_ERROR) {
+            qWarning() << QString::fromUtf8((const char*)sqlite3_errmsg(db_));
+            sqlite3_finalize(pVM);
+            break;
+        }
+        nRet = sqlite3_finalize(pVM);
+    } while (nRet == SQLITE_SCHEMA);
 }
