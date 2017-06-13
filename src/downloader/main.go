@@ -50,7 +50,6 @@ func (s *Semaphore) Release() {
 type Dictionary map[string]string
 
 var (
-	client            *http.Client
 	wg                sync.WaitGroup
 	dictionaries      = make(map[string]Dictionary)
 	dictionariesMutex sync.Mutex
@@ -98,6 +97,7 @@ func downloadDictionary(u string, m Dictionary) {
 		req.Header.Set("Cookie", cookie)
 		req.Header.Set("Connection", connection)
 		req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
+		client := &http.Client{}
 	doPageRequest:
 		resp, err := client.Do(req)
 		if err != nil {
@@ -172,6 +172,7 @@ func downloadDictionaryPage(u string) {
 	req.Header.Set("Cookie", cookie)
 	req.Header.Set("Connection", connection)
 	req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
+	client := &http.Client{}
 doPageRequest:
 	resp, err := client.Do(req)
 	if err != nil {
@@ -275,6 +276,7 @@ func downloadCategory(u string) {
 	req.Header.Set("Cookie", cookie)
 	req.Header.Set("Connection", connection)
 	req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
+	client := &http.Client{}
 doPageRequest:
 	resp, err := client.Do(req)
 	if err != nil {
@@ -334,6 +336,7 @@ func downloadRoot() {
 	req.Header.Set("Cookie", cookie)
 	req.Header.Set("Connection", connection)
 	req.Header.Set("Upgrade-Insecure-Requests", upgradeInsecureRequests)
+	client := &http.Client{}
 doPageRequest:
 	resp, err := client.Do(req)
 	if err != nil {
@@ -385,8 +388,6 @@ doPageRequest:
 }
 
 func main() {
-	client = &http.Client{}
-
 	downloadRoot()
 	wg.Wait()
 
